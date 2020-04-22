@@ -1,0 +1,244 @@
+---
+title: "Exercise 3"
+name: "Kirath Singh"
+date: 26/03/2020
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*.
+
+
+
+Importing the requisite libraries
+```{r}
+library(tidyverse)
+library(kernlab)
+library(dbscan)
+library(clValid) # For selecting cluster method and number of clusters
+library(factoextra) # for cluster fitting and visualization
+library(uwot) # For UMAP dimensionality reduction 
+library(patchwork) # For arranging multiple plots
+
+set.seed(888) # To ensure consistent results from non-deterministic procedures
+```
+
+
+
+
+
+
+compas.df is our data
+For cluster analysis only numeric data can be used , hence all columns of type categorical,date, etc.other than numeric were removed.
+Removed outcome columns like decile_score,recidivinism rate, v_decile_score,etc.
+The selected_data is the final data , after filtering, which will be used for clustering.
+
+```{r}
+
+compas.df = read_csv("https://raw.githubusercontent.com/propublica/compas-analysis/master/compas-scores.csv")
+#compas.df%>% skimr::skim()
+k=drop_na(compas.df,days_b_screening_arrest,c_offense_date,r_charge_desc,r_jail_in,days_b_screening_arrest,c_charge_desc)#removing missing rows
+k2=k%>% select(-vr_offense_date,-vr_charge_desc,-num_vr_cases,-vr_case_number,-vr_charge_degree,-c_arrest_date,-num_r_cases)
+k3=k2%>%select(age,juv_fel_count,juv_misd_count,juv_other_count,priors_count,days_b_screening_arrest,c_days_from_compas,r_days_from_arrest)
+
+selected_data=k3%>%sample_n(size = 400)%>%scale() %>% as.data.frame() 
+selected_data %>% skimr::skim() 
+
+
+
+
+```
+```{r}
+```
+
+
+
+
+
+
+
+
+
+#Things i learnt 
+Connectivity-Calculates the connectivity validation measure for a given cluster partitioning.The value of connectivity is between 0 and infinity, and should be minimized.
+
+Dunn index-The Dunn Index is the ratio of the smallest distance between observations not in the same cluster to the largest intra-cluster distance. The Dunn Index has a value between zero and infinity, and should be maximized.
+
+The Silhouette Width - It is the average of each observation’s Silhouette value. The Silhouette value measures the degree of confidence in the clustering assignment of a particular observation, with well-clustered observations having values near 1 and poorly clustered observations having values near −1.
+
+#Scores
+According to the Connectivity and Silhouette measure , the kmeans clustering method with 2 clusters gives the best score
+According to the Dunn measure, the kmeans clustering again gives the best score but this time with 4 clusters.
+
+
+```{r}
+internal.cl = clValid(selected_data, 
+                  nClust = 2:10,
+                  clMethods = c("kmeans","pam", "agnes", "diana"),
+                  maxitems = 1000, # specifies the number of cases considered
+                  validation = "internal")
+
+## View internal metrics   
+summary(internal.cl)
+plot(internal.cl)
+```
+
+
+
+
+
+
+
+
+
+
+#Things I learnt 
+APN(Average Proportion of Non-overlap)-The APN measures the average proportion of observations not placed in the same cluster by clustering based on the full data and clustering based on the data with a single column removed.The APN is in the interval [0, 1], with values close to zero corresponding with highly consistent clustering results.
+
+AD(Average Distance)- The AD measure computes the average distance between observations placed in the same cluster by clustering based on the full data and clustering based on the data with a single column removed. The AD has a value between zero and ∞, and smaller values are preferred.
+
+ADM(Average Distance between Means)- The ADM measure computes the average distance between cluster centers for observations placed in the same cluster by clustering based on the full data and clustering based on the data with a single column removed. It has a value between zero and ∞,smaller values are prefered.
+
+FOM(Figure of Merit)-The FOM measures the average intra-cluster variance of the observationsin the deleted column, where the clustering is based on the remaining (undeleted) samples. This estimates the mean error using predictions based on the cluster averages. The final score is averaged over all the removed columns, and has a value between zero and ∞, with smaller values equaling better performance.
+
+#Scores
+According to the APN measure, the agnes clustering method gave the best score with 2 clusters.
+According to the AD measure, the pam clustering method gave the best score with 10 clusters.
+According to the ADM measure, the diana clustering method gave the best score with 2 clusters.
+According to the FOM measure, the pam clustering method gave the best score with 10 clusters.
+
+
+
+
+
+
+```{r}
+
+stability.cl = clValid(selected_data, 
+                nClust = 2:10, 
+                clMethods = c("kmeans","pam", "agnes", "diana"),
+                maxitems = 1700, # specifies the number of cases considered
+                validation = "stability")
+
+## View stability metrics
+summary(stability.cl)
+plot(stability.cl)
+```
+#Things i learnt
+I chose the kmeans clustering algorithm since it took less computation times as compared to other algorithms and got good scores in the internal validation.
+As it is quite evident in the silhouette plot, that silhouette width is the highest for 2 clusters and acts as the local optima.
+Another method that can be used to choose the number of optimum clusters is the elbow plot method.
+
+In this cell, I plotted the clusters as well as the silhouette plot for k means clustering algorithm . The average silhouette width turns out to  be 0.3
+
+```{r}
+
+compas = eclust(selected_data, 
+                    FUNcluster = "kmeans", 
+                    nboot = 200,
+                    seed = 888)
+
+# Silhouette plot
+fviz_silhouette(compas)
+```
+
+
+#Couldnt plot the dendrogam plot with kmeans clustering algorithm
+
+
+
+
+
+```{r}
+compas = eclust(selected_data, 
+       FUNcluster = "kmeans", 
+       k = 2,
+       hc_metric = "euclidean", hc_method = "ward.D2", 
+       seed = 888)
+
+# Silhouette plot
+fviz_silhouette(compas)
+
+# Dendrogam plot
+#fviz_dend(compas) 
+
+# Plot cluster membership in PCA space
+fviz_cluster(compas)
+```
+
+
+#Things I learnt
+UMAP is an algorithm for dimension reduction based on manifold learning techniques and ideas from topological data analysis. It provides a very general framework for approaching manifold learning and dimension reduction, but can also provide specific concrete realizations. 
+
+
+
+
+#According to the UMAP data, kmeans performs best with 3 clusters
+
+
+
+
+```{r}
+umap.df = umap(selected_data, n_neighbors = 50, n_components = 2) %>% scale()
+colnames(umap.df) = c("umap1", "umap2")
+umap.df = as.data.frame(umap.df)
+
+umap.plot = ggplot(umap.df, aes(umap1, umap2)) + 
+  geom_point(size = .5) +
+  labs(title = "UMAP-transformed data") +
+  theme_bw() 
+umap.plot
+
+selected_data = cbind(selected_data, umap.df)
+
+## More components capture more information
+umap4.df = umap(selected_data, n_neighbors = 50, n_components = 4) %>% scale()
+
+## Cluster based on UMAP data
+internal.cl = clValid(umap4.df, 
+                  nClust = 2:15, 
+                  clMethods = c("kmeans", "pam", "agnes", "diana"),
+                  maxitems = 1700,
+                  validation = "internal")
+
+## View internal metrics   
+summary(internal.cl)
+plot(internal.cl)
+
+## Cluster based on UMAP data
+stability.cl = clValid(umap4.df, 
+                  nClust = 2:15, 
+                  clMethods = c("kmeans", "pam", "agnes", "diana"),
+                  maxitems = 1700,
+                  validation = "stability")
+
+## View internal metrics   
+summary(stability.cl)
+plot(stability.cl)
+
+
+## UMAP and kmeans
+umap.compas.kmean = eclust(umap.df, 
+       FUNcluster = "kmeans", 
+       k = 3,
+       seed = 888)
+  
+
+selected_data = cbind(selected_data, cluster = as.factor(umap.compas.kmean$cluster))
+
+km_umap.plot = 
+  ggplot(selected_data, aes(umap1, umap2, colour = cluster)) + 
+  geom_point(size = 1) + 
+  labs(title = "Kmeans clustering based on UMAP transformed data", x = "", y = "") +
+  theme_bw() + 
+  theme(legend.position = "none") 
+
+km_umap.plot
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
